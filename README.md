@@ -31,7 +31,7 @@ if err != nil {
 
 err = db.NewMigrate(dbh).Run(migrations)
 if err != nil {
-  panic(err)
+	panic(err)
 }
 ```
 
@@ -41,21 +41,21 @@ Formatter usage example:
 // in order to use db.ScanRowsIntoStruct() you have to format query result in JSON
 rows, err := db.Query(dbh, `SELECT row_to_json(t.*) FROM test AS t WHERE id = :id`, db.Params{"id": 1})
 if err != nil && err != sql.ErrNoRows {
-  panic(err)
+	panic(err)
 }
 
 // a struct for filling up with select data
 struct testModel {
-  id int
+	id int
 }
 
 var tests []testModel
 // iterate over results and build slice of structs
 for rows.Next() {
-  var test testModel
-  if err := db.ScanRowsIntoStruct(rows, &test); err != nil {
-    panic(err)
-  }
-  tests = append(tests, test)
+	var test testModel
+	if err := db.ScanRowsIntoStruct(rows, &test); err != nil {
+		panic(err)
+	}
+	tests = append(tests, test)
 }
 ```
