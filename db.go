@@ -4,64 +4,171 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/kisielk/sqlstruct"
+	"github.com/shopspring/decimal"
 )
 
 const DateTimeTzFormat = "2006-01-02 15:04:05.999999999-07"
 
 type Params map[string]interface{}
 
-func qprintf(sql string, params Params) (string, error) {
-	var i int64
-	var err error
-	indexedParams := make([]interface{}, len(params))
-	for k, v := range params {
-		sql = strings.Replace(sql, ":"+k, "%["+strconv.FormatInt(i+1, 10)+"]s", -1)
-		indexedParams[i], err = toDbValue(v)
-		if err != nil {
-			return "", err
-		}
-		i++
+var paramMatchRegexp = regexp.MustCompile("(^|[^:]):\\w+")
+
+type Error struct {
+	error
+	Query  string
+	Params Params
+}
+
+func wrapError(err error, sql string, params Params) error {
+	if err == nil {
+		return nil
 	}
-	return fmt.Sprintf(sql, indexedParams...), nil
+	return &Error{
+		error:  err,
+		Query:  sql,
+		Params: params,
+	}
+}
+
+func qprintf(sql string, params Params) (string, error) {
+	var err error
+	sql = paramMatchRegexp.ReplaceAllStringFunc(
+		sql,
+		func(matched string) string {
+			// once an error occurred, skip other params
+			if err != nil {
+				return matched
+			}
+			param := matched
+			var precedingChar string
+			// any character preceding ':' that was captured by reg expr
+			// should not be included in param name
+			if matched[0] != ':' {
+				param = param[1:]
+				precedingChar = string(matched[0])
+			}
+			// skip : at beginning
+			param = param[1:]
+			v, ok := params[param]
+			if !ok {
+				err = fmt.Errorf("parameter %s is missing", param)
+				return matched
+			}
+			var castedValue string
+			castedValue, err = toDbValue(v)
+			return precedingChar + castedValue
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+	return sql, nil
 }
 
 func Exec(db Queryable, sql string, params Params) (sql.Result, error) {
 	query, err := qprintf(sql, params)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err, sql, params)
 	}
-	return db.Exec(query)
+	res, err := db.Exec(query)
+	if err != nil {
+		return nil, wrapError(err, sql, params)
+	}
+	return res, nil
 }
 
 func Query(db Queryable, sql string, params Params) (*sql.Rows, error) {
 	query, err := qprintf(sql, params)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err, sql, params)
 	}
-	return db.Query(query)
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, wrapError(err, sql, params)
+	}
+	return rows, nil
 }
 
 func QueryRow(db Queryable, sql string, params Params) (*sql.Row, error) {
 	query, err := qprintf(sql, params)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err, sql, params)
 	}
 	return db.QueryRow(query), nil
 }
 
-func QueryRowIntoStruct(db Queryable, sql string, params Params, target interface{}) error {
+func QueryRowAndScan(db Queryable, sql string, params Params, dest ...interface{}) error {
+	row, err := QueryRow(db, sql, params)
+	if err != nil {
+		return err
+	}
+	if err := row.Scan(dest...); err != nil {
+		return wrapError(err, sql, params)
+	}
+	return nil
+}
+
+func QueryJSONRowIntoStruct(db Queryable, sql string, params Params, target interface{}) error {
 	row, err := QueryRow(db, sql, params)
 	if err != nil {
 		return err
 	}
 	var data []byte
-	err = row.Scan(&data)
-	if err != nil {
+	if err = row.Scan(&data); err != nil {
+		return wrapError(err, sql, params)
+	}
+	if err = json.Unmarshal(data, target); err != nil {
+		return wrapError(err, sql, params)
+	}
+	return nil
+}
+
+func ScanJSONRowsIntoStruct(rows *sql.Rows, target interface{}) error {
+	var data []byte
+	if err := rows.Scan(&data); err != nil {
 		return err
 	}
 	return json.Unmarshal(data, target)
+}
+
+func QueryRowIntoStruct(db Queryable, q string, params Params, target interface{}) error {
+	rows, err := Query(db, q, params)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return sql.ErrNoRows
+	}
+	if err = sqlstruct.Scan(target, rows); err != nil {
+		return wrapError(err, q, params)
+	}
+	return nil
+}
+
+func QueryRowsIntoSlice(db Queryable, sql string, params Params, target interface{}) error {
+	rows, err := Query(db, sql, params)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	v := reflect.ValueOf(target)
+	elemType := reflect.TypeOf(target).Elem()
+	for rows.Next() {
+		elemPtr := reflect.New(elemType)
+		if err := sqlstruct.Scan(elemPtr.Interface(), rows); err != nil {
+			return wrapError(err, sql, params)
+		}
+		elem := reflect.Indirect(elemPtr)
+		v = reflect.Append(v, elem)
+	}
+	return nil
 }
 
 // toDbValue prepares value to be passed in SQL query
@@ -70,17 +177,42 @@ func toDbValue(value interface{}) (string, error) {
 	if value == nil {
 		return "NULL", nil
 	}
-	if value, ok := value.(string); ok {
+	switch value := value.(type) {
+	case string:
 		return quoteLiteral(value), nil
-	}
-	if value, ok := value.(int); ok {
+	case *string:
+		if value == nil {
+			return "NULL", nil
+		}
+		return quoteLiteral(*value), nil
+	case int:
 		return strconv.Itoa(value), nil
-	}
-	if value, ok := value.(float64); ok {
+	case *int:
+		if value == nil {
+			return "NULL", nil
+		}
+		return strconv.Itoa(*value), nil
+	case float64:
 		return strconv.FormatFloat(value, 'g', -1, 64), nil
-	}
-	if value, ok := value.(bool); ok {
+	case *float64:
+		if value == nil {
+			return "NULL", nil
+		}
+		return strconv.FormatFloat(*value, 'g', -1, 64), nil
+	case bool:
 		return strconv.FormatBool(value), nil
+	case *bool:
+		if value == nil {
+			return "NULL", nil
+		}
+		return strconv.FormatBool(*value), nil
+	case decimal.Decimal:
+		return value.String(), nil
+	case *decimal.Decimal:
+		if value == nil {
+			return "NULL", nil
+		}
+		return value.String(), nil
 	}
 	// the value is either slice or map, so insert it as JSON string
 	// fixme: marshaller doesn't know how to encode map[interface{}]interface{}
