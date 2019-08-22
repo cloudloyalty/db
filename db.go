@@ -103,28 +103,34 @@ func QueryRow(db Queryable, sql string, params Params) (*sql.Row, error) {
 	return db.QueryRow(query), nil
 }
 
-func QueryRowAndScan(db Queryable, sql string, params Params, dest ...interface{}) error {
-	row, err := QueryRow(db, sql, params)
+func QueryRowAndScan(db Queryable, q string, params Params, dest ...interface{}) error {
+	row, err := QueryRow(db, q, params)
 	if err != nil {
 		return err
 	}
 	if err := row.Scan(dest...); err != nil {
-		return wrapError(err, sql, params)
+		if err == sql.ErrNoRows {
+			return err
+		}
+		return wrapError(err, q, params)
 	}
 	return nil
 }
 
-func QueryJSONRowIntoStruct(db Queryable, sql string, params Params, target interface{}) error {
-	row, err := QueryRow(db, sql, params)
+func QueryJSONRowIntoStruct(db Queryable, q string, params Params, target interface{}) error {
+	row, err := QueryRow(db, q, params)
 	if err != nil {
 		return err
 	}
 	var data []byte
 	if err = row.Scan(&data); err != nil {
-		return wrapError(err, sql, params)
+		if err == sql.ErrNoRows {
+			return err
+		}
+		return wrapError(err, q, params)
 	}
 	if err = json.Unmarshal(data, target); err != nil {
-		return wrapError(err, sql, params)
+		return wrapError(err, q, params)
 	}
 	return nil
 }
@@ -152,23 +158,23 @@ func QueryRowIntoStruct(db Queryable, q string, params Params, target interface{
 	return nil
 }
 
-func QueryRowsIntoSlice(db Queryable, sql string, params Params, target interface{}) error {
-	rows, err := Query(db, sql, params)
+func QueryRowsIntoSlice(db Queryable, q string, params Params, target interface{}) (interface{}, error) {
+	rows, err := Query(db, q, params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
-	v := reflect.ValueOf(target)
-	elemType := reflect.TypeOf(target).Elem()
+	elemType := reflect.TypeOf(target)
+	v := reflect.MakeSlice(reflect.SliceOf(elemType), 0, 0)
 	for rows.Next() {
 		elemPtr := reflect.New(elemType)
 		if err := sqlstruct.Scan(elemPtr.Interface(), rows); err != nil {
-			return wrapError(err, sql, params)
+			return nil, wrapError(err, q, params)
 		}
 		elem := reflect.Indirect(elemPtr)
 		v = reflect.Append(v, elem)
 	}
-	return nil
+	return v.Interface(), nil
 }
 
 // toDbValue prepares value to be passed in SQL query
