@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kisielk/sqlstruct"
 	"github.com/shopspring/decimal"
@@ -184,41 +185,48 @@ func toDbValue(value interface{}) (string, error) {
 		return "NULL", nil
 	}
 	switch value := value.(type) {
-	case string:
-		return quoteLiteral(value), nil
 	case *string:
 		if value == nil {
 			return "NULL", nil
 		}
-		return quoteLiteral(*value), nil
-	case int:
-		return strconv.Itoa(value), nil
+		return toDbValue(*value)
+	case string:
+		return quoteLiteral(value), nil
 	case *int:
 		if value == nil {
 			return "NULL", nil
 		}
-		return strconv.Itoa(*value), nil
-	case float64:
-		return strconv.FormatFloat(value, 'g', -1, 64), nil
+		return toDbValue(*value)
+	case int:
+		return strconv.Itoa(value), nil
 	case *float64:
 		if value == nil {
 			return "NULL", nil
 		}
-		return strconv.FormatFloat(*value, 'g', -1, 64), nil
-	case bool:
-		return strconv.FormatBool(value), nil
+		return toDbValue(*value)
+	case float64:
+		return strconv.FormatFloat(value, 'g', -1, 64), nil
 	case *bool:
 		if value == nil {
 			return "NULL", nil
 		}
-		return strconv.FormatBool(*value), nil
-	case decimal.Decimal:
-		return value.String(), nil
+		return toDbValue(*value)
+	case bool:
+		return strconv.FormatBool(value), nil
 	case *decimal.Decimal:
 		if value == nil {
 			return "NULL", nil
 		}
+		return toDbValue(*value)
+	case decimal.Decimal:
 		return value.String(), nil
+	case *time.Time:
+		if value == nil {
+			return "NULL", nil
+		}
+		return toDbValue(*value)
+	case time.Time:
+		return quoteLiteral(value.Format(DateTimeTzFormat)), nil
 	}
 	// the value is either slice or map, so insert it as JSON string
 	// fixme: marshaller doesn't know how to encode map[interface{}]interface{}
