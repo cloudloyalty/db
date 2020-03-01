@@ -18,6 +18,8 @@ const DateTimeTzFormat = "2006-01-02 15:04:05.999999999-07"
 
 type Params map[string]interface{}
 
+type commaList []interface{}
+
 var paramMatchRegexp = regexp.MustCompile("(^|[^:]):\\w+")
 
 type Error struct {
@@ -227,6 +229,16 @@ func toDbValue(value interface{}) (string, error) {
 		return toDbValue(*value)
 	case time.Time:
 		return quoteLiteral(value.Format(DateTimeTzFormat)), nil
+	case commaList:
+		e := make([]string, len(value))
+		for i := range value {
+			var err error
+			e[i], err = toDbValue(value[i])
+			if err != nil {
+				return "", err
+			}
+		}
+		return strings.Join(e, ", "), nil
 	}
 	// the value is either slice or map, so insert it as JSON string
 	// fixme: marshaller doesn't know how to encode map[interface{}]interface{}
