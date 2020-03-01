@@ -46,6 +46,12 @@ func TestQprintf(t *testing.T) {
 			Params{"int": 1},
 			"'1'::int",
 		},
+		// comma list
+		{
+			"WHERE field IN (:comma_list)",
+			Params{"comma_list": CommaListParam{1, 2, 3, 4, 5, nil, 6, "as"}},
+			"WHERE field IN (1, 2, 3, 4, 5, NULL, 6, 'as')",
+		},
 	}
 
 	for _, c := range cases {
