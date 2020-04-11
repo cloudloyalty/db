@@ -245,7 +245,11 @@ func toDbValue(value interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return quoteLiteral(string(encoded)), nil
+	asString := string(encoded)
+	if encoded == nil || asString == "null" {
+		return "NULL", nil
+	}
+	return quoteLiteral(asString), nil
 }
 
 // quoteLiteral properly escapes string to be safely
