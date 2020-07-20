@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 )
@@ -37,6 +38,8 @@ func (m *Migrate) Run(migrations []Migration) error {
 	}
 	defer tx.Rollback()
 
+	ctx := context.Background()
+
 	for _, m := range migrations {
 		if err != nil {
 			break
@@ -48,7 +51,7 @@ func (m *Migrate) Run(migrations []Migration) error {
 	}
 
 	if err == nil {
-		_, err := Exec(tx, "UPDATE migrations SET version = :latest", Params{"latest": latest})
+		_, err := Exec(ctx, tx, "UPDATE migrations SET version = :latest", Params{"latest": latest})
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -73,40 +74,40 @@ func qprintf(sql string, params Params) (string, error) {
 	return sql, nil
 }
 
-func Exec(db Queryable, sql string, params Params) (sql.Result, error) {
+func Exec(ctx context.Context, db Queryable, sql string, params Params) (sql.Result, error) {
 	query, err := qprintf(sql, params)
 	if err != nil {
 		return nil, wrapError(err, sql, params)
 	}
-	res, err := db.Exec(query)
+	res, err := db.ExecContext(ctx, query)
 	if err != nil {
 		return nil, wrapError(err, sql, params)
 	}
 	return res, nil
 }
 
-func Query(db Queryable, sql string, params Params) (*sql.Rows, error) {
+func Query(ctx context.Context, db Queryable, sql string, params Params) (*sql.Rows, error) {
 	query, err := qprintf(sql, params)
 	if err != nil {
 		return nil, wrapError(err, sql, params)
 	}
-	rows, err := db.Query(query)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, wrapError(err, sql, params)
 	}
 	return rows, nil
 }
 
-func QueryRow(db Queryable, sql string, params Params) (*sql.Row, error) {
+func QueryRow(ctx context.Context, db Queryable, sql string, params Params) (*sql.Row, error) {
 	query, err := qprintf(sql, params)
 	if err != nil {
 		return nil, wrapError(err, sql, params)
 	}
-	return db.QueryRow(query), nil
+	return db.QueryRowContext(ctx, query), nil
 }
 
-func QueryRowAndScan(db Queryable, q string, params Params, dest ...interface{}) error {
-	row, err := QueryRow(db, q, params)
+func QueryRowAndScan(ctx context.Context, db Queryable, q string, params Params, dest ...interface{}) error {
+	row, err := QueryRow(ctx, db, q, params)
 	if err != nil {
 		return err
 	}
@@ -119,8 +120,8 @@ func QueryRowAndScan(db Queryable, q string, params Params, dest ...interface{})
 	return nil
 }
 
-func QueryJSONRowIntoStruct(db Queryable, q string, params Params, target interface{}) error {
-	row, err := QueryRow(db, q, params)
+func QueryJSONRowIntoStruct(ctx context.Context, db Queryable, q string, params Params, target interface{}) error {
+	row, err := QueryRow(ctx, db, q, params)
 	if err != nil {
 		return err
 	}
@@ -137,16 +138,8 @@ func QueryJSONRowIntoStruct(db Queryable, q string, params Params, target interf
 	return nil
 }
 
-func ScanJSONRowsIntoStruct(rows *sql.Rows, target interface{}) error {
-	var data []byte
-	if err := rows.Scan(&data); err != nil {
-		return err
-	}
-	return json.Unmarshal(data, target)
-}
-
-func QueryRowIntoStruct(db Queryable, q string, params Params, target interface{}) error {
-	rows, err := Query(db, q, params)
+func QueryRowIntoStruct(ctx context.Context, db Queryable, q string, params Params, target interface{}) error {
+	rows, err := Query(ctx, db, q, params)
 	if err != nil {
 		return err
 	}
@@ -160,8 +153,8 @@ func QueryRowIntoStruct(db Queryable, q string, params Params, target interface{
 	return nil
 }
 
-func QueryRowsIntoSlice(db Queryable, q string, params Params, target interface{}) (interface{}, error) {
-	rows, err := Query(db, q, params)
+func QueryRowsIntoSlice(ctx context.Context, db Queryable, q string, params Params, target interface{}) (interface{}, error) {
+	rows, err := Query(ctx, db, q, params)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +170,14 @@ func QueryRowsIntoSlice(db Queryable, q string, params Params, target interface{
 		v = reflect.Append(v, elem)
 	}
 	return v.Interface(), nil
+}
+
+func ScanJSONRowsIntoStruct(rows *sql.Rows, target interface{}) error {
+	var data []byte
+	if err := rows.Scan(&data); err != nil {
+		return err
+	}
+	return json.Unmarshal(data, target)
 }
 
 // toDbValue prepares value to be passed in SQL query
@@ -255,11 +256,30 @@ func toDbValue(value interface{}) (string, error) {
 // quoteLiteral properly escapes string to be safely
 // passed as a value in SQL query
 func quoteLiteral(s string) string {
-	var p string
-	if strings.Contains(s, `\`) {
-		p = "E"
+	var b strings.Builder
+	b.Grow(len(s) * 2 + 3)
+
+	b.WriteRune('E')
+	b.WriteRune('\'')
+
+	hasSlash := false
+	for _, c := range s {
+		if c == '\\' {
+			b.WriteString(`\\`)
+			hasSlash = true
+		} else if c == '\'' {
+			b.WriteString(`''`)
+		} else {
+			b.WriteRune(c)
+		}
 	}
-	s = strings.Replace(s, `'`, `''`, -1)
-	s = strings.Replace(s, `\`, `\\`, -1)
-	return p + `'` + s + `'`
+
+	b.WriteRune('\'')
+
+	s = b.String()
+	if !hasSlash {
+		// remove unnecessary E at the beginning
+		return s[1:]
+	}
+	return s
 }

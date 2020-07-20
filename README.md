@@ -39,7 +39,7 @@ Formatter usage example:
 ```go
 // run a query with param substitution
 // in order to use db.ScanRowsIntoStruct() you have to format query result in JSON
-rows, err := db.Query(dbh, `SELECT row_to_json(t.*) FROM test AS t WHERE id = :id`, db.Params{"id": 1})
+rows, err := db.Query(ctx, dbh, `SELECT row_to_json(t.*) FROM test AS t WHERE id = :id`, db.Params{"id": 1})
 if err != nil && err != sql.ErrNoRows {
 	panic(err)
 }
