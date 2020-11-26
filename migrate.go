@@ -7,7 +7,7 @@ import (
 )
 
 const InitialMigration = `
-CREATE TABLE IF NOT EXISTS migrations (version INT NOT NULL);
+CREATE TABLE IF NOT EXISTS migrations (version INT NOT NULL PRIMARY KEY);
 INSERT INTO migrations VALUES (1);
 `
 
