@@ -23,9 +23,17 @@ type CommaListParam []interface{}
 var paramMatchRegexp = regexp.MustCompile("(^|[^:]):\\w+")
 
 type Error struct {
-	error
+	cause error
 	Query  string
 	Params Params
+}
+
+func (e *Error) Error() string {
+	return e.cause.Error()
+}
+
+func (e *Error) Cause() error {
+	return e.cause
 }
 
 func wrapError(err error, sql string, params Params) error {
@@ -33,7 +41,7 @@ func wrapError(err error, sql string, params Params) error {
 		return nil
 	}
 	return &Error{
-		error:  err,
+		cause:  err,
 		Query:  sql,
 		Params: params,
 	}
