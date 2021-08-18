@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,10 +19,8 @@ const DateTimeTzFormat = "2006-01-02 15:04:05.999999999-07"
 type Params map[string]interface{}
 type CommaListParam []interface{}
 
-var paramMatchRegexp = regexp.MustCompile("(^|[^:]):\\w+")
-
 type Error struct {
-	cause error
+	cause  error
 	Query  string
 	Params Params
 }
@@ -48,38 +45,53 @@ func wrapError(err error, sql string, params Params) error {
 }
 
 func qprintf(sql string, params Params) (string, error) {
-	var err error
-	sql = paramMatchRegexp.ReplaceAllStringFunc(
-		sql,
-		func(matched string) string {
-			// once an error occurred, skip other params
-			if err != nil {
-				return matched
-			}
-			param := matched
-			var precedingChar string
-			// any character preceding ':' that was captured by reg expr
-			// should not be included in param name
-			if matched[0] != ':' {
-				param = param[1:]
-				precedingChar = string(matched[0])
-			}
-			// skip : at beginning
-			param = param[1:]
-			v, ok := params[param]
-			if !ok {
-				err = fmt.Errorf("parameter %s is missing", param)
-				return matched
-			}
-			var castedValue string
-			castedValue, err = toDbValue(v)
-			return precedingChar + castedValue
-		},
-	)
-	if err != nil {
-		return "", err
+	return qprintfFast(sql, params)
+}
+
+func qprintfFast(sql string, params Params) (string, error) {
+	isNotWordChar := func(r rune) bool {
+		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_')
 	}
-	return sql, nil
+	var result strings.Builder
+	s := sql
+	for {
+		idx := strings.IndexRune(s, ':')
+		// ':' not found or its at the end of the string
+		if idx == -1 || idx == len(s)-1 {
+			result.WriteString(s)
+			break
+		}
+		// followed by a non-word char?
+		if isNotWordChar(rune(s[idx+1])) {
+			result.WriteString(s[:idx+2])
+			s = s[idx+2:]
+			continue
+		}
+		result.WriteString(s[:idx])
+		s = s[idx+1:] // skip ':' char
+		// find next \W character
+		idxEnd := strings.IndexFunc(s, isNotWordChar)
+		var param string
+		if idxEnd == -1 {
+			param = s
+		} else {
+			param = s[:idxEnd]
+		}
+		v, ok := params[param]
+		if !ok {
+			return "", fmt.Errorf("parameter %s is missing", param)
+		}
+		castedValue, err := toDbValue(v)
+		if err != nil {
+			return "", err
+		}
+		result.WriteString(castedValue)
+		if idxEnd == -1 {
+			break
+		}
+		s = s[idxEnd:]
+	}
+	return result.String(), nil
 }
 
 func Exec(ctx context.Context, db Queryable, sql string, params Params) (sql.Result, error) {
@@ -265,7 +277,7 @@ func toDbValue(value interface{}) (string, error) {
 // passed as a value in SQL query
 func quoteLiteral(s string) string {
 	var b strings.Builder
-	b.Grow(len(s) * 2 + 3)
+	b.Grow(len(s)*2 + 3)
 
 	b.WriteRune('E')
 	b.WriteRune('\'')

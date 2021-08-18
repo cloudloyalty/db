@@ -26,6 +26,12 @@ func TestQprintf(t *testing.T) {
 		params         Params
 		expectedResult string
 	}{
+		// empty source
+		{
+			"",
+			Params{},
+			"",
+		},
 		// strings
 		{
 			":a, :b",
@@ -133,6 +139,17 @@ func TestQprintf(t *testing.T) {
 			":a",
 			Params{"a": nullPointerToStruct},
 			"NULL",
+		},
+		// some edge cases
+		{
+			":",
+			Params{},
+			":",
+		},
+		{
+			"::",
+			Params{},
+			"::",
 		},
 	}
 
