@@ -20,35 +20,23 @@ type Params map[string]interface{}
 type CommaListParam []interface{}
 
 type Error struct {
-	cause  error
+	error
 	Query  string
 	Params Params
-}
-
-func (e *Error) Error() string {
-	return e.cause.Error()
-}
-
-func (e *Error) Cause() error {
-	return e.cause
 }
 
 func wrapError(err error, sql string, params Params) error {
 	if err == nil {
 		return nil
 	}
-	return &Error{
-		cause:  err,
+	return Error{
+		error:  err,
 		Query:  sql,
 		Params: params,
 	}
 }
 
 func qprintf(sql string, params Params) (string, error) {
-	return qprintfFast(sql, params)
-}
-
-func qprintfFast(sql string, params Params) (string, error) {
 	isNotWordChar := func(r rune) bool {
 		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_')
 	}
