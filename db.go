@@ -25,7 +25,7 @@ type Error struct {
 	Params Params
 }
 
-func (e Error) Error() string {
+func (e *Error) Error() string {
 	if e.cause == nil {
 		return "<cause is nil>"
 	}
@@ -35,7 +35,7 @@ func (e Error) Error() string {
 	return e.cause.Error()
 }
 
-func (e Error) Cause() error {
+func (e *Error) Cause() error {
 	return e.cause
 }
 
@@ -43,7 +43,7 @@ func wrapError(err error, sql string, params Params) error {
 	if err == nil {
 		return nil
 	}
-	return Error{
+	return &Error{
 		cause:  err,
 		Query:  sql,
 		Params: params,
