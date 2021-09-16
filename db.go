@@ -20,9 +20,23 @@ type Params map[string]interface{}
 type CommaListParam []interface{}
 
 type Error struct {
-	error
+	cause  error
 	Query  string
 	Params Params
+}
+
+func (e Error) Error() string {
+	if e.cause == nil {
+		return "<cause is nil>"
+	}
+	if reflect.ValueOf(e.cause).IsNil() {
+		return "<cause has nil value behind non-nil interface>"
+	}
+	return e.cause.Error()
+}
+
+func (e Error) Cause() error {
+	return e.cause
 }
 
 func wrapError(err error, sql string, params Params) error {
@@ -30,7 +44,7 @@ func wrapError(err error, sql string, params Params) error {
 		return nil
 	}
 	return Error{
-		error:  err,
+		cause:  err,
 		Query:  sql,
 		Params: params,
 	}

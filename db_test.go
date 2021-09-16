@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -158,4 +159,17 @@ func TestQprintf(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, c.expectedResult, result)
 	}
+}
+
+func TestError_Error(t *testing.T) {
+	assert.Nil(t, wrapError(nil, "query", Params{}))
+
+	causeError := errors.New("error")
+	err := wrapError(causeError, "query", Params{})
+	assert.NotNil(t, err)
+	assert.Error(t, causeError, err)
+
+	var nilCauseError *Error
+	nilError := wrapError(nilCauseError, "query", Params{})
+	assert.Nil(t, nilError)
 }
