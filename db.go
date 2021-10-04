@@ -27,6 +27,14 @@ type Error struct {
 }
 
 func (e *Error) Error() string {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovering from panic:", r)
+			stackSlice := make([]byte, 512)
+			s := runtime.Stack(stackSlice, false)
+			fmt.Printf("\n%s", stackSlice[0:s])
+		}
+	}()
 	if e.cause == nil {
 		return "<cause is nil>"
 	}
