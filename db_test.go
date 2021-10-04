@@ -172,5 +172,5 @@ func TestError_Error(t *testing.T) {
 	var nilCauseError *Error
 	nilError := wrapError(nilCauseError, "query", Params{})
 	assert.NotNil(t, nilError)
-	assert.Equal(t, "<cause has nil value behind non-nil interface>", nilError.Error())
+	assert.Contains(t, nilError.Error(), "<cause has nil value behind non-nil interface>")
 }

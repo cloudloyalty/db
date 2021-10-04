@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -29,8 +30,15 @@ func (e *Error) Error() string {
 	if e.cause == nil {
 		return "<cause is nil>"
 	}
-	if reflect.ValueOf(e.cause).IsNil() {
-		return "<cause has nil value behind non-nil interface>"
+	v := reflect.ValueOf(e.cause)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.UnsafePointer, reflect.Interface:
+		if v.IsNil() {
+			stackSlice := make([]byte, 512)
+			s := runtime.Stack(stackSlice, false)
+			stackStr := fmt.Sprintf("\n%s", stackSlice[0:s])
+			return "<cause has nil value behind non-nil interface>" + stackStr
+		}
 	}
 	return e.cause.Error()
 }
