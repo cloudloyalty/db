@@ -28,7 +28,7 @@ type Error struct {
 }
 
 func (e *Error) Error() string {
-	stackSlice := make([]byte, 512)
+	stackSlice := make([]byte, 512*100)
 	s := runtime.Stack(stackSlice, false)
 	stackStr := fmt.Sprintf("\n%s", stackSlice[0:s])
 
@@ -49,6 +49,8 @@ func (e *Error) Error() string {
 			return "<cause has nil value behind non-nil interface>" + stackStr
 		}
 	}
+
+	fmt.Fprintf(os.Stderr, "cause error: %s", e.cause.Error())
 
 	return e.cause.Error()
 }
