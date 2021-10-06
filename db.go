@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -27,27 +28,28 @@ type Error struct {
 }
 
 func (e *Error) Error() string {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("Recovering from panic:", r)
-			stackSlice := make([]byte, 512)
-			s := runtime.Stack(stackSlice, false)
-			fmt.Printf("\n%s", stackSlice[0:s])
-		}
-	}()
+	stackSlice := make([]byte, 512)
+	s := runtime.Stack(stackSlice, false)
+	stackStr := fmt.Sprintf("\n%s", stackSlice[0:s])
+
+	fmt.Fprintf(os.Stderr, "db error: %s", stackStr)
+
+	if e == nil {
+		return "<e is nil>" + stackStr
+	}
+
 	if e.cause == nil {
 		return "<cause is nil>"
 	}
+
 	v := reflect.ValueOf(e.cause)
 	switch v.Kind() {
 	case reflect.Ptr, reflect.UnsafePointer, reflect.Interface:
 		if v.IsNil() {
-			stackSlice := make([]byte, 512)
-			s := runtime.Stack(stackSlice, false)
-			stackStr := fmt.Sprintf("\n%s", stackSlice[0:s])
 			return "<cause has nil value behind non-nil interface>" + stackStr
 		}
 	}
+
 	return e.cause.Error()
 }
 
