@@ -22,21 +22,21 @@ type Params map[string]interface{}
 type CommaListParam []interface{}
 
 type Error struct {
-	cause  error
-	stack  string
-	Query  string
-	Params Params
+	cause    error
+	stack    string
+	causeFmt string
+	Query    string
+	Params   Params
 }
 
 func (e *Error) Error() string {
-
-	fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v", e.stack, e.Query, e.Params, e.cause)
-
 	if e == nil {
-		return "<e is nil>" + e.stack
+		fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v, %v", e.stack, e.causeFmt, e.Query, e.Params, e.cause)
+		return "<e is nil>"
 	}
 
 	if e.cause == nil {
+		fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v, %v", e.stack, e.causeFmt, e.Query, e.Params, e.cause)
 		return "<cause is nil>"
 	}
 
@@ -44,11 +44,13 @@ func (e *Error) Error() string {
 	switch v.Kind() {
 	case reflect.Ptr, reflect.UnsafePointer, reflect.Interface:
 		if v.IsNil() {
-			return "<cause has nil value behind non-nil interface>" + e.stack
+			fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v, %v", e.stack, e.causeFmt, e.Query, e.Params, e.cause)
+			return "<cause has nil value behind non-nil interface>"
 		}
+	case reflect.Invalid:
+		fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v, %v", e.stack, e.causeFmt, e.Query, e.Params, e.cause)
+		return "<cause is invalid>"
 	}
-
-	fmt.Fprintf(os.Stderr, "cause error: %s", e.cause.Error())
 
 	return e.cause.Error()
 }
@@ -67,10 +69,11 @@ func wrapError(err error, sql string, params Params) error {
 	stackStr := fmt.Sprintf("\n%s", stackSlice[0:s])
 
 	return &Error{
-		cause:  err,
-		stack:  stackStr,
-		Query:  sql,
-		Params: params,
+		cause:    err,
+		causeFmt: fmt.Sprintf("%v", err),
+		stack:    stackStr,
+		Query:    sql,
+		Params:   params,
 	}
 }
 
