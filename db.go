@@ -23,19 +23,17 @@ type CommaListParam []interface{}
 
 type Error struct {
 	cause  error
+	stack  string
 	Query  string
 	Params Params
 }
 
 func (e *Error) Error() string {
-	stackSlice := make([]byte, 512*100)
-	s := runtime.Stack(stackSlice, false)
-	stackStr := fmt.Sprintf("\n%s", stackSlice[0:s])
 
-	fmt.Fprintf(os.Stderr, "db error: %s", stackStr)
+	fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v", e.stack, e.Query, e.Params, e.cause)
 
 	if e == nil {
-		return "<e is nil>" + stackStr
+		return "<e is nil>" + e.stack
 	}
 
 	if e.cause == nil {
@@ -46,7 +44,7 @@ func (e *Error) Error() string {
 	switch v.Kind() {
 	case reflect.Ptr, reflect.UnsafePointer, reflect.Interface:
 		if v.IsNil() {
-			return "<cause has nil value behind non-nil interface>" + stackStr
+			return "<cause has nil value behind non-nil interface>" + e.stack
 		}
 	}
 
@@ -63,8 +61,14 @@ func wrapError(err error, sql string, params Params) error {
 	if err == nil {
 		return nil
 	}
+
+	stackSlice := make([]byte, 512*100)
+	s := runtime.Stack(stackSlice, false)
+	stackStr := fmt.Sprintf("\n%s", stackSlice[0:s])
+
 	return &Error{
 		cause:  err,
+		stack:  stackStr,
 		Query:  sql,
 		Params: params,
 	}
