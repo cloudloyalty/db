@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/kisielk/sqlstruct"
 	"github.com/shopspring/decimal"
 )
@@ -22,33 +23,19 @@ type Params map[string]interface{}
 type CommaListParam []interface{}
 
 type Error struct {
-	cause    error
-	stack    string
-	causeFmt string
-	Query    string
-	Params   Params
+	cause  error
+	stack  string
+	dump   string
+	Query  string
+	Params Params
 }
 
 func (e *Error) Error() string {
-	if e == nil {
-		fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v, %v", e.stack, e.causeFmt, e.Query, e.Params, e.cause)
-		return "<e is nil>"
-	}
-
-	if e.cause == nil {
-		fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v, %v", e.stack, e.causeFmt, e.Query, e.Params, e.cause)
-		return "<cause is nil>"
-	}
-
 	v := reflect.ValueOf(e.cause)
 	switch v.Kind() {
-	case reflect.Ptr, reflect.UnsafePointer, reflect.Interface:
-		if v.IsNil() {
-			fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v, %v", e.stack, e.causeFmt, e.Query, e.Params, e.cause)
-			return "<cause has nil value behind non-nil interface>"
-		}
 	case reflect.Invalid:
-		fmt.Fprintf(os.Stderr, "db error: %s, %s, %s, %v, %v", e.stack, e.causeFmt, e.Query, e.Params, e.cause)
+		fmt.Fprintf(os.Stderr, "db error:\nstack:\n%s,\ndump:%s,\nquery:%s,\nparams:%v",
+			e.stack, e.dump, e.Query, e.Params)
 		return "<cause is invalid>"
 	}
 
@@ -63,17 +50,28 @@ func wrapError(err error, sql string, params Params) error {
 	if err == nil {
 		return nil
 	}
+	return &Error{
+		cause:  err,
+		Query:  sql,
+		Params: params,
+	}
+}
+
+func wrapErrorDebug(err error, sql string, params Params, row *sql.Row, ctx context.Context) error {
+	if err == nil {
+		return nil
+	}
 
 	stackSlice := make([]byte, 512*100)
 	s := runtime.Stack(stackSlice, false)
 	stackStr := fmt.Sprintf("\n%s", stackSlice[0:s])
 
 	return &Error{
-		cause:    err,
-		causeFmt: fmt.Sprintf("%v", err),
-		stack:    stackStr,
-		Query:    sql,
-		Params:   params,
+		cause:  err,
+		dump:   spew.Sdump(err, row, ctx),
+		stack:  stackStr,
+		Query:  sql,
+		Params: params,
 	}
 }
 
@@ -164,7 +162,7 @@ func QueryRowAndScan(ctx context.Context, db Queryable, q string, params Params,
 		if err == sql.ErrNoRows {
 			return err
 		}
-		return wrapError(err, q, params)
+		return wrapErrorDebug(err, q, params, row, ctx)
 	}
 	return nil
 }
