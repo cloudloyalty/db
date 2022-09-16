@@ -33,6 +33,10 @@ func (e *Error) Cause() error {
 	return e.cause
 }
 
+func (e *Error) Unwrap() error {
+	return e.cause
+}
+
 func wrapError(err error, sql string, params Params) error {
 	if err == nil {
 		return nil
