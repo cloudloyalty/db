@@ -50,7 +50,7 @@ func wrapError(err error, sql string, params Params) error {
 
 func qprintf(sql string, params Params) (string, error) {
 	isNotWordChar := func(r rune) bool {
-		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_')
+		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_' || (r >= '0' && r <= '9'))
 	}
 	var result strings.Builder
 	s := sql

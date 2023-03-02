@@ -1,10 +1,10 @@
 package db
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/shopspring/decimal"
-
 	"github.com/stretchr/testify/assert"
 )
 
@@ -151,11 +151,19 @@ func TestQprintf(t *testing.T) {
 			Params{},
 			"::",
 		},
+		// params with digits
+		{
+			":a1_2, :b3_4",
+			Params{"a1_2": "value_a", "b3_4": "value_b"},
+			"'value_a', 'value_b'",
+		},
 	}
 
-	for _, c := range cases {
-		result, err := qprintf(c.SQL, c.params)
-		assert.NoError(t, err)
-		assert.Equal(t, c.expectedResult, result)
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("case %d", i+1), func(t *testing.T) {
+			result, err := qprintf(c.SQL, c.params)
+			assert.NoError(t, err)
+			assert.Equal(t, c.expectedResult, result)
+		})
 	}
 }
